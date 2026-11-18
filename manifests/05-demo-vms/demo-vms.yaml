@@ -1,0 +1,253 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vm-rightsizing-demo
+---
+# OVERSIZED: 4 vCPU / 8Gi but idle -> ACM should recommend far less CPU and memory
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: demo-oversized-idle
+  namespace: vm-rightsizing-demo
+  labels:
+    app: rightsizing-demo
+  annotations:
+    description: "OVERSIZED: 4 vCPU / 8Gi but idle -> ACM should recommend far less CPU and memory"
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: demo-oversized-idle-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: demo-oversized-idle
+    spec:
+      domain:
+        cpu:
+          sockets: 1
+          cores: 4
+          threads: 1
+        memory:
+          guest: 8Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk: {bus: virtio}
+            - name: cloudinitdisk
+              disk: {bus: virtio}
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: demo-oversized-idle-rootdisk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+                #cloud-config
+                user: fedora
+                password: rightsizing
+                chpasswd: { expire: False }
+---
+# UNDERSIZED: 1 vCPU / 2Gi, CPU pinned at 100% and ~1.8Gi memory held -> ACM recommends more than requested
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: demo-undersized-busy
+  namespace: vm-rightsizing-demo
+  labels:
+    app: rightsizing-demo
+  annotations:
+    description: "UNDERSIZED: 1 vCPU / 2Gi, CPU pinned at 100% and ~1.8Gi memory held -> ACM recommends more than requested"
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: demo-undersized-busy-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: demo-undersized-busy
+    spec:
+      domain:
+        cpu:
+          sockets: 1
+          cores: 1
+          threads: 1
+        memory:
+          guest: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk: {bus: virtio}
+            - name: cloudinitdisk
+              disk: {bus: virtio}
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: demo-undersized-busy-rootdisk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+                #cloud-config
+                user: fedora
+                password: rightsizing
+                chpasswd: { expire: False }
+                write_files:
+                  - path: /etc/systemd/system/cpu-burn.service
+                    content: |
+                      [Unit]
+                      Description=rightsizing demo load cpu-burn
+                      [Service]
+                      ExecStart=/bin/sh -c 'while :; do :; done'
+                      Restart=always
+                      Nice=10
+                      [Install]
+                      WantedBy=multi-user.target
+                  - path: /etc/systemd/system/cpu-burn2.service
+                    content: |
+                      [Unit]
+                      Description=rightsizing demo load cpu-burn2
+                      [Service]
+                      ExecStart=/bin/sh -c 'while :; do :; done'
+                      Restart=always
+                      Nice=10
+                      [Install]
+                      WantedBy=multi-user.target
+                  - path: /etc/systemd/system/mem-hog.service
+                    content: |
+                      [Unit]
+                      Description=rightsizing demo load mem-hog
+                      [Service]
+                      ExecStart=/bin/sh -c '{ head -c 1800M /dev/zero; sleep infinity; } | tail'
+                      Restart=always
+                      Nice=10
+                      [Install]
+                      WantedBy=multi-user.target
+                runcmd:
+                  - systemctl daemon-reload
+                  - systemctl enable --now cpu-burn cpu-burn2 mem-hog
+---
+# WELL-SIZED: 2 vCPU / 4Gi using ~1.3 cores and ~3Gi -> recommendation rounds to the current size
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: demo-wellsized
+  namespace: vm-rightsizing-demo
+  labels:
+    app: rightsizing-demo
+  annotations:
+    description: "WELL-SIZED: 2 vCPU / 4Gi using ~1.3 cores and ~3Gi -> recommendation rounds to the current size"
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: demo-wellsized-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: demo-wellsized
+    spec:
+      domain:
+        cpu:
+          sockets: 1
+          cores: 2
+          threads: 1
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk: {bus: virtio}
+            - name: cloudinitdisk
+              disk: {bus: virtio}
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: demo-wellsized-rootdisk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+                #cloud-config
+                user: fedora
+                password: rightsizing
+                chpasswd: { expire: False }
+                write_files:
+                  - path: /etc/systemd/system/cpu-burn.service
+                    content: |
+                      [Unit]
+                      Description=rightsizing demo load cpu-burn
+                      [Service]
+                      ExecStart=/bin/sh -c 'while :; do :; done'
+                      Restart=always
+                      Nice=10
+                      [Install]
+                      WantedBy=multi-user.target
+                  - path: /etc/systemd/system/cpu-duty30.service
+                    content: |
+                      [Unit]
+                      Description=rightsizing demo load cpu-duty30
+                      [Service]
+                      ExecStart=/bin/sh -c 'while :; do timeout 0.3 yes >/dev/null; sleep 0.7; done'
+                      Restart=always
+                      Nice=10
+                      [Install]
+                      WantedBy=multi-user.target
+                  - path: /etc/systemd/system/mem-hog.service
+                    content: |
+                      [Unit]
+                      Description=rightsizing demo load mem-hog
+                      [Service]
+                      ExecStart=/bin/sh -c '{ head -c 2500M /dev/zero; sleep infinity; } | tail'
+                      Restart=always
+                      Nice=10
+                      [Install]
+                      WantedBy=multi-user.target
+                runcmd:
+                  - systemctl daemon-reload
+                  - systemctl enable --now cpu-burn cpu-duty30 mem-hog

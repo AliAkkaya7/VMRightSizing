@@ -1,0 +1,12 @@
+# External endpoint for metrics export (Prometheus Remote-Write), referenced by MCO spec.storageConfig.writeStorage
+apiVersion: v1
+kind: Secret
+metadata:
+  name: metrics-receiver
+  namespace: open-cluster-management-observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+type: Opaque
+stringData:
+  ep.yaml: |
+    url: http://metrics-receiver.metrics-receiver.svc:9090/api/v1/write

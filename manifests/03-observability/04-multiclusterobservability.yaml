@@ -1,0 +1,26 @@
+apiVersion: observability.open-cluster-management.io/v1beta2
+kind: MultiClusterObservability
+metadata:
+  name: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  observabilityAddonSpec: {}
+  storageConfig:
+    metricObjectStorage:
+      name: thanos-object-storage
+      key: thanos.yaml
+    storageClass: ocs-external-storagecluster-ceph-rbd
+    alertmanagerStorageSize: 1Gi
+    ruleStorageSize: 1Gi
+    storeStorageSize: 10Gi
+    receiveStorageSize: 20Gi
+    compactStorageSize: 20Gi
+    writeStorage:                       # export metrics to external endpoint(s)
+      - name: metrics-receiver
+        key: ep.yaml
+  capabilities:
+    platform:
+      analytics:
+        virtualizationRightSizingRecommendation:
+          enabled: true

@@ -1,0 +1,88 @@
+# Test-only external endpoint: Prometheus with the Remote-Write receiver enabled.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: metrics-receiver
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: metrics-receiver
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 1m
+    storage:
+      tsdb:
+        out_of_order_time_window: 1h
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-receiver
+  namespace: metrics-receiver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metrics-receiver
+  template:
+    metadata:
+      labels:
+        app: metrics-receiver
+    spec:
+      containers:
+        - name: prometheus
+          image: quay.io/prometheus/prometheus:v3.16.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --web.enable-remote-write-receiver
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-receiver
+  namespace: metrics-receiver
+spec:
+  selector:
+    app: metrics-receiver
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: metrics-receiver
+  namespace: metrics-receiver
+spec:
+  to:
+    kind: Service
+    name: metrics-receiver
+  tls:
+    termination: edge
