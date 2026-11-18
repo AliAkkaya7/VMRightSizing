@@ -115,6 +115,7 @@ Values are the highest 5-minute peak of the day; they settle once a full day of 
 
 ## Notes
 
+- During the hub install the console reloads its plugins (`mce`, then `acm`); an open browser tab may show a plugin load error. Reload the page once MultiClusterHub is `Running`.
 - `writeStorage` exports everything the hub receives (all collected metrics, not only right-sizing).
 - In RHACM 2.17 the only profile is `Max OverAll`; P99/P95 profiles arrive with RHACM 5.0.
 - The Thanos bucket credentials are generated in-cluster; a sync-hook Job writes `thanos-object-storage`, so no secret is stored in Git.
